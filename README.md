@@ -1,57 +1,70 @@
 # Origin Markets Backend Test
 
-### Spec:
+## How to start this app:
 
-We would like you to implement an api to: ingest some data representing bonds, query an external api for some additional data, store the result, and make the resulting data queryable via api.
-- Fork this hello world repo leveraging Django & Django Rest Framework. (If you wish to use something else like flask that's fine too.)
-- Please pick and use a form of authentication, so that each user will only see their own data. ([DRF Auth Options](https://www.django-rest-framework.org/api-guide/authentication/#api-reference))
-- We are missing some data! Each bond will have a `lei` field (Legal Entity Identifier). Please use the [GLEIF API](https://www.gleif.org/en/lei-data/gleif-lei-look-up-api/access-the-api) to find the corresponding `Legal Name` of the entity which issued the bond.
-- If you are using a database, SQLite is sufficient.
-- Please test any additional logic you add.
+```bash
+# install the requirements
+pip install -r requirements.txt
 
-#### Project Quickstart
+# apply migrations
+python manage.py migrate
 
-Inside a virtual environment running Python 3:
-- `pip install -r requirement.txt`
-- `./manage.py runserver` to run server.
-- `./manage.py test` to run tests.
+# install fixtures and user account
+python manage.py dev_setup
 
-#### API
+# start the app
+python manage.py runserver
+```
 
-We should be able to send a request to:
+## Using the app
 
-`POST /bonds/`
+The `dev_setup` script creates a user account with the username "admin" and 
+password "test". For the sake of simplicity, it uses basic auth. 
+You can access test the API via the DRF UI at `http://localhost:8000/bonds/` using these credentials.
 
-to create a "bond" with data that looks like:
-~~~
-{
-    "isin": "FR0000131104",
-    "size": 100000000,
+You can also use it programmatically as follows:
+```python
+import requests
+from urllib.parse import urlencode
+
+# create a new bond
+payload = {
+    "isin": "RU000A102DV0",
+    "size": 400000000,
     "currency": "EUR",
-    "maturity": "2025-02-28",
-    "lei": "R0MUWSFPU8MPRO8K5P83"
+    "maturity": "2027-02-28",
+    "lei": "335800O79JS4I4IBD212",
 }
-~~~
----
-We should be able to send a request to:
 
-`GET /bonds/`
+response = requests.post(
+    'http://localhost:8000/bonds/', json=payload, auth=('admin', 'test')
+)
+assert response.status_code == 201, response.content
 
-to see something like:
-~~~
-[
-    {
-        "isin": "FR0000131104",
-        "size": 100000000,
-        "currency": "EUR",
-        "maturity": "2025-02-28",
-        "lei": "R0MUWSFPU8MPRO8K5P83",
-        "legal_name": "BNPPARIBAS"
-    },
-    ...
-]
-~~~
-We would also like to be able to add a filter such as:
-`GET /bonds/?legal_name=BNPPARIBAS`
+# list objects
+response = requests.get(
+    'http://localhost:8000/bonds/', auth=('admin', 'test')
+)
+assert response.status_code == 200, response.content
+print(response.json())
 
-to reduce down the results.
+# use filters
+filters = dict(legal_name='BNP PARIBAS')
+response = requests.get(f'http://localhost:8000?{urlencode(filters)}', auth=('admin', 'test'))
+assert response.status_code == 200, response.content
+print(response.json())
+```
+
+## Running the unit tests
+```bash
+cd origin
+pytest . -x --cov --cov-fail-under=100
+```
+
+## Other notes
+- The API validates that the LEI and ISIN are valid on POST
+- The currency must be a valid ISO 4217 currency code
+- I've assumed that the LEI is the primary key and must be unique
+- Users can only access objects that they themselves have created
+- Filtering is possible on all fields of the Bond model
+
